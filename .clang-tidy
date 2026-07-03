@@ -1,0 +1,13 @@
+Checks: '-*,readability-identifier-naming'
+CheckOptions:
+  readability-identifier-naming.VariableCase: camelBack
+  readability-identifier-naming.ParameterCase: camelBack
+  readability-identifier-naming.MemberCase: camelBack
+  readability-identifier-naming.FunctionCase: camelBack
+  readability-identifier-naming.EnumConstantCase: CamelCase
+  readability-identifier-naming.StructCase: CamelCase
+  readability-identifier-naming.EnumCase: CamelCase
+  readability-identifier-naming.GlobalConstantCase: camelBack
+  readability-identifier-naming.StaticConstantCase: camelBack
+  readability-identifier-naming.GlobalVariableCase: camelBack
+  readability-identifier-naming.StaticVariableCase: camelBack
