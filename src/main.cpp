@@ -97,14 +97,14 @@ struct LevelDef {
 //       e 敌兵  c 敌将    m 敌巫    K 魔王
 static const LevelDef levels[] = {
     {"初阵",
-     "哨探来报：一队敌兵越过了边界。带上蓝骑士，给他们一个教训！",
+     "哨探来报：不只是零星敌兵，还有个百夫长压阵。带上蓝骑士，给他们一个教训！",
      ObjWipe,
      {
          "...............",
-         ".......e.......",
-         "..e....e....e..",
-         ".....e...e.....",
-         "...............",
+         "...e...e...e...",
+         "..e...e...e....",
+         ".......c.......",
+         "....e.....e....",
          ".....X...X.....",
          "...............",
          "...............",
@@ -117,17 +117,17 @@ static const LevelDef levels[] = {
          "...............",
      }},
     {"石林",
-     "乱石如林，敌将据险而守。善用黑石遮挡远程攻击的视线。",
+     "乱石如林，两员敌将据险而守。善用黑石遮挡远程攻击的视线。",
      ObjWipe,
      {
          "...............",
-         "...e.......e...",
-         ".......c.......",
+         "...e...c...e...",
+         ".e.....e.....e.",
          "...X.X...X.X...",
-         ".....e...e.....",
+         ".....e.c.e.....",
          "..X....e....X..",
          "....X.....X....",
-         "...e...X.......",
+         "...e...X...e...",
          "....X.....X....",
          "..X.........X..",
          ".....h...h.....",
@@ -137,36 +137,36 @@ static const LevelDef levels[] = {
          "...............",
      }},
     {"突围",
-     "敌军四面合围。不必恋战——护送主角抵达东北角的旗帜！",
+     "敌军重重合围，兵力悬殊，硬拼难以全歼。护送主角杀出重围，抵达东北角的旗帜！",
      ObjReach,
      {
          ".............E.",
-         "........X......",
+         "........Xe.c...",
          "....e.....e....",
-         "..........X....",
+         "....e...e.Xe...",
          ".....X.e.......",
          ".e.......X..e..",
-         "....X..........",
-         ".......h.......",
-         "..........X....",
+         "....X..e..e....",
+         ".......h...e...",
+         "....e..e..X....",
          "..X.....e......",
          ".....X....e....",
-         ".h.............",
+         ".h......e......",
          "..s.Y..........",
          ".G.B...........",
          "..s............",
      }},
     {"双将",
-     "两员敌将互为犄角，敌巫在后方压阵。逐个击破，勿陷重围。",
+     "两员敌将互为犄角，敌巫压阵，敌兵蜂拥而至。逐个击破，勿陷重围！",
      ObjWipe,
      {
          "...............",
          "....c.....c....",
          ".......m.......",
-         "..e...........e",
+         "..e...e.e...e..",
          "....e.....e....",
          ".....X.X.X.....",
-         "...............",
+         "....e.....e....",
          "..X..........X.",
          "......e.e......",
          "...............",
@@ -177,15 +177,15 @@ static const LevelDef levels[] = {
          "...............",
      }},
     {"隘口",
-     "一道石墙横贯战场，只有两处隘口。是坚守，还是强攻？",
+     "石墙横贯战场，只有两处隘口，墙后敌巫冷箭封锁。是坚守，还是强攻？",
      ObjWipe,
      {
          "...............",
          "...e...c...e...",
+         "......m........",
+         "..e..e...e..e..",
+         "...e...c...e...",
          "..e.........e..",
-         ".....e...e.....",
-         "....e.....e....",
-         "...e.......e...",
          "...............",
          "XXXX.XXXXX.XXXX",
          "...............",
@@ -197,19 +197,19 @@ static const LevelDef levels[] = {
          "...............",
      }},
     {"法阵",
-     "三名敌巫布下法阵，冷箭射程极远。切勿在开阔地久留！",
+     "四名敌巫布下法阵，箭雨覆盖全场，敌将率兵合围。切勿在开阔地久留！",
      ObjWipe,
      {
          "...............",
-         ".....m...m.....",
+         "...m.......m...",
          "....X.....X....",
-         "...X...m...X...",
-         "....e.....e....",
-         "..X....c....X..",
-         "....e.....e....",
+         "...X..m....X...",
+         "....e..c..e....",
+         "..X.........X..",
+         "...e...c...e...",
          "...X.......X...",
          "....X.....X....",
-         "......e.e......",
+         "...e..e.e..e...",
          ".....X...X.....",
          "...............",
          "...s.......s...",
@@ -315,8 +315,10 @@ static Font gFont, gFontBig;
 // 单位字母与关卡图例一致：G 主角 B 蓝骑士 R 红法师 Y 黄牧师 s 义勇兵
 //                          e 敌兵 c 敌将 m 敌巫 K 魔王
 static bool cliMode = false;
-static int scoreJitter = 0;             // selfplay 打分抖动（模拟多局差异）
-static std::vector<std::string> cliLog; // 战斗事件（伤害/治疗）记录
+static bool aiSim = false;               // 置位时抑制动画/日志副作用（AI 前瞻模拟用）
+static bool benchScriptedPlayer = false; // 置位时玩家方改用固定的朴素贪心策略（独立强度标尺）
+static int scoreJitter = 0;              // selfplay 打分抖动（模拟多局差异）
+static std::vector<std::string> cliLog;  // 战斗事件（伤害/治疗）记录
 
 static const char typeChar[UCount] = {'G', 'B', 'R', 'Y', 's', 'e', 'c', 'm', 'K'};
 
@@ -343,6 +345,8 @@ static Vector2 cellCenter(float cx, float cy) {
 }
 
 static void addFloat(int cx, int cy, const std::string &s, Color c) {
+  if (aiSim)
+    return;
   Vector2 p = cellCenter((float)cx, (float)cy);
   g.floats.push_back({p.x, p.y - 14, 0, s, c});
 }
@@ -460,7 +464,7 @@ static void damageUnit(int ti, int atk) {
     t.alive = false;
     t.deathT = 1.0f;
   }
-  if (cliMode)
+  if (cliMode && !aiSim)
     cliLog.push_back(TextFormat("x%s -%d%s", unitTag(t).c_str(), dmg, t.alive ? "" : " 阵亡"));
 }
 
@@ -475,7 +479,7 @@ static void doAction(int ai, int ti, bool heal) {
     int amt = std::min(healAmt, t.def().hp - t.hp);
     t.hp += amt;
     addFloat(t.x, t.y, TextFormat("+%d", amt), (Color){130, 230, 140, 255});
-    if (cliMode)
+    if (cliMode && !aiSim)
       cliLog.push_back(TextFormat("+%s +%d", unitTag(t).c_str(), amt));
   } else if (a.def().aoe) {
     // 魔王：波及范围内所有我方单位
@@ -534,7 +538,8 @@ static void checkOutcome() {
     return;
   }
   Objective ob = levels[g.levelIdx].obj;
-  if ((ob == ObjWipe && !anyEnemy) || (ob == ObjBoss && !bossAlive))
+  // 全歼敌军永远算胜利；此外弑君关击杀魔王即可（残兵不影响）
+  if (!anyEnemy || (ob == ObjBoss && !bossAlive))
     g.gameMode = MVictory;
 }
 
@@ -737,6 +742,67 @@ static void threatMap(bool fromSide, int threat[n][n]) {
   }
 }
 
+// ---- 一步前瞻：用真实规则模拟候选动作，再用一个统一评估函数打分 ----
+// 单位价值（厘点）。击杀/集火/优先脆皮/护住主角，都由"价值 × 剩余血量比例"自然涌现，
+// 不再需要一堆手调常数。
+static int pieceValue(int type) {
+  switch (type) {
+  case UGreen:
+    return 7000; // 主角：阵亡即败，最高优先
+  case UBlue:
+    return 4600; // 蓝骑士（坦克）
+  case URed:
+    return 4400; // 红法师（脆皮高伤）
+  case UYellow:
+    return 4200; // 黄牧师（治疗，需优先除去）
+  case USoldier:
+  case UEsoldier:
+    return 800; // 小兵
+  case UEcaptain:
+    return 3400;
+  case UEmage:
+    return 4000;
+  case UEboss:
+    return 12000;
+  }
+  return 1000;
+}
+
+// 局面评估（站在 side 视角）：己方价值 − 敌方价值，价值按剩余血量比例缩放；
+// 己方单位若站在对方火力（oppThreat）下，按预期损失折价。
+static int evaluateFor(bool side, int oppThreat[n][n]) {
+  int v = 0;
+  for (auto &u : g.units) {
+    if (!u.alive)
+      continue;
+    int maxhp = std::max(1, u.def().hp);
+    bool mine = (u.def().enemy == side);
+    v += (mine ? 1 : -1) * pieceValue(u.type) * u.hp / maxhp;
+    if (mine && oppThreat[u.y][u.x] > 0) { // 预期下回合会被打掉的价值
+      int dmg = std::min(u.hp, oppThreat[u.y][u.x]);
+      v -= pieceValue(u.type) * dmg / maxhp;
+    }
+  }
+  return v;
+}
+
+// 模拟「移动到 (sx,sy) 并可选攻击 ti」，返回结果局面对 side 的评估值；随后完全回滚。
+static int simulateAction(int ui, int sx, int sy, int ti, bool side, int oppThreat[n][n]) {
+  std::vector<Unit> ub = g.units;
+  std::vector<Item> ib = g.items;
+  Mode mb = g.gameMode;
+  aiSim = true;
+  moveUnit(ui, sx, sy);
+  if (ti >= 0)
+    doAction(ui, ti, false);
+  int v = evaluateFor(side, oppThreat);
+  aiSim = false;
+  g.units = ub;
+  g.items = ib;
+  g.gameMode = mb;
+  return v;
+}
+
 static void aiActFor(int ui) {
   Unit &u = g.units[ui];
   const UnitDef &d = u.def();
@@ -744,10 +810,9 @@ static void aiActFor(int ui) {
   static int dist[n][n];
   computeReach(ui, dist);
 
-  // 敌方规避与撤退用威胁图
-  static int threat[n][n];
-  if (side)
-    threatMap(false, threat);
+  // 对方威胁图：既供评估函数折价，也供防守方的撤退/集结判断
+  static int oppThreat[n][n];
+  threatMap(!side, oppThreat);
 
   auto inRangeLos = [&](int x, int y, const Unit &t) {
     int md = manh(x, y, t.x, t.y);
@@ -784,67 +849,42 @@ static void aiActFor(int ui) {
     }
   }
 
-  // 2) 找最优 (落点, 攻击目标)：收益与风险分离打分。
-  //    收益 = 伤害/击杀/补刀/脆皮 + 群攻加成（能一起够到该目标的友军越多越敢上）
-  //    风险 = 落点处对方火力 ×3；净亏损的换命在有退路时会被放弃（见出手判定）
-  int bestScore = -1, bx = u.x, by = u.y, bt = -1;
-  bool safeExists = false;
+  // 群胆：附近（曼哈顿 4 格内）有 2 个以上同伴时更敢冒险。
+  int nearAllies = 0;
+  for (int j = 0; j < (int)g.units.size(); j++) {
+    const Unit &p = g.units[j];
+    if (j != ui && p.alive && p.def().enemy == side && manh(p.x, p.y, u.x, u.y) <= 4)
+      nearAllies++;
+  }
+  bool courage = nearAllies >= 2;
+  bool defensive = side && levels[g.levelIdx].obj != ObjReach;
+
+  // 2) 一步前瞻：模拟每个「落点 + 攻击目标」，用统一评估函数取对己方最有利者。
+  //    击杀/集火/优先脆皮/避开火力，都从评估里自然涌现，无需手调分项常数。
+  int baseline = evaluateFor(side, oppThreat); // 按兵不动的局面值
+  int bestVal = -1000000000, bx = u.x, by = u.y, bt = -1;
   for (int y = 0; y < n; y++)
     for (int x = 0; x < n; x++) {
       if (dist[y][x] < 0 || !canStand(ui, x, y))
         continue;
-      if (side && threat[y][x] == 0)
-        safeExists = true;
       for (int i = 0; i < (int)g.units.size(); i++) {
         const Unit &t = g.units[i];
-        if (!t.alive || t.def().enemy == side)
+        if (!t.alive || t.def().enemy == side || !inRangeLos(x, y, t))
           continue;
-        if (!inRangeLos(x, y, t))
-          continue;
-        int dmg = effDmg(d.atk, t);
-        int score = dmg * 15;
-        if (dmg >= t.hp)
-          score += 1000;                  // 能击杀
-        score += (t.def().hp - t.hp) * 4; // 补刀残血
-        if (t.type == UYellow || t.type == URed || t.type == UEmage)
-          score += 25; // 优先脆皮
-        int pack = 0;  // 群攻协同：数一数还有多少友军够得到这个目标
-        for (int j = 0; j < (int)g.units.size(); j++) {
-          const Unit &p = g.units[j];
-          if (j != ui && p.alive && p.def().enemy == side &&
-              manh(p.x, p.y, t.x, t.y) <= p.def().mov + p.def().rng)
-            pack++;
-        }
-        score += pack * 15;
-        if (d.rng > 1)
-          score += manh(x, y, t.x, t.y) * 2; // 远程尽量在最大射程出手
-        if (d.aoe) {                         // 魔王：波及越多越好
-          int extra = 0;
-          for (auto &p : g.units)
-            if (p.alive && p.def().enemy != side && manh(x, y, p.x, p.y) >= 1 &&
-                manh(x, y, p.x, p.y) <= d.rng && los(x, y, p.x, p.y))
-              extra++;
-          score += extra * 200;
-        }
-        score -= dist[y][x]; // 少走路
-        if (side) {
-          score -= threat[y][x] * 2; // 风险：避开对方火力密集的落点（放宽以保留冒险精神）
-          if (threat[y][x] >= u.hp)
-            score -= 20; // 必死惩罚：站上去就会被打死的落点
-        }
-        score += jitter();
-        if (score > bestScore) {
-          bestScore = score;
+        int val = simulateAction(ui, x, y, i, side, oppThreat) - dist[y][x] + jitter() * 50;
+        if (val > bestVal) {
+          bestVal = val;
           bx = x;
           by = y;
           bt = i;
         }
       }
     }
+  bool bestKills = bt >= 0 && (d.aoe || effDmg(d.atk, g.units[bt]) >= g.units[bt].hp);
 
   // 3) 主角在夺旗关：能攻则攻（击杀优先），否则全速冲旗
   if (!side && u.type == UGreen && levels[g.levelIdx].obj == ObjReach && g.exitX >= 0) {
-    if (bt >= 0 && bestScore >= 1000) { // 只为击杀停留
+    if (bt >= 0 && (bestKills || bestVal - baseline >= 800)) { // 只为可观收益停留
       moveUnit(ui, bx, by);
       doAction(ui, bt, false);
       return;
@@ -864,25 +904,16 @@ static void aiActFor(int ui) {
     return;
   }
 
-  // 群胆：附近（曼哈顿 4 格内）有 2 个以上同伴时更敢冒险，不再回避净亏损换命。
-  int nearAllies = 0;
-  for (int j = 0; j < (int)g.units.size(); j++) {
-    const Unit &p = g.units[j];
-    if (j != ui && p.alive && p.def().enemy == side && manh(p.x, p.y, u.x, u.y) <= 4)
-      nearAllies++;
-  }
-  bool courage = nearAllies >= 2;
-
-  // 出手判定：防守方（歼灭/弑君关的敌人）只有孤立无援时才拒绝净亏损的换命（保留退路），
-  // 有同伴壮胆或夺旗关时一律全力出手。
-  bool defensive = side && levels[g.levelIdx].obj != ObjReach;
-  if (bt >= 0 && !(defensive && bestScore < 0 && safeExists && !courage)) {
+  // 出手判定：进攻若能改善局面（或击杀 / 群胆 / 夺旗关），就打；孤立单位不做纯亏损的
+  // 送死换命。因 2) 已在所有可达落点里搜过，凑不到攻击(bt<0)即本回合确实打不到人。
+  bool engage = bt >= 0 && (!defensive || courage || bestKills || bestVal >= baseline);
+  if (engage) {
     moveUnit(ui, bx, by);
     doAction(ui, bt, false);
     return;
   }
 
-  // 4) 不出手时的机动
+  // 4) 打不到（或不值得打）：朝对方机动
   std::vector<std::pair<int, int>> srcs;
   for (auto &p : g.units)
     if (p.alive && p.def().enemy != side)
@@ -892,19 +923,19 @@ static void aiActFor(int ui) {
   static int df[n][n];
   distField(srcs, df);
   if (defensive) {
-    // 只有孤立（同伴<2）且站在必死火力下的单位才撤到火力圈边缘（打了就跑）；
+    // 只有孤立（同伴<2）且站在必死火力下的单位才撤到火力圈边缘；
     // 有同伴壮胆或伤害尚可承受时顶着火力压上；不在火力圈内时到圈外集结。
-    if (threat[u.y][u.x] > 0) {
-      if (threat[u.y][u.x] >= u.hp && nearAllies < 2) {
+    if (oppThreat[u.y][u.x] > 0) {
+      if (oppThreat[u.y][u.x] >= u.hp && nearAllies < 2) {
         int mx = u.x, my = u.y;
-        int bt2 = threat[u.y][u.x];
+        int bt2 = oppThreat[u.y][u.x];
         int bd2 = df[u.y][u.x] < 0 ? 9999 : df[u.y][u.x];
         for (int y = 0; y < n; y++)
           for (int x = 0; x < n; x++) {
             if (dist[y][x] < 0 || !canStand(ui, x, y) || df[y][x] < 0)
               continue;
-            if (threat[y][x] < bt2 || (threat[y][x] == bt2 && df[y][x] < bd2)) {
-              bt2 = threat[y][x];
+            if (oppThreat[y][x] < bt2 || (oppThreat[y][x] == bt2 && df[y][x] < bd2)) {
+              bt2 = oppThreat[y][x];
               bd2 = df[y][x];
               mx = x;
               my = y;
@@ -916,29 +947,94 @@ static void aiActFor(int ui) {
         moveAlong(ui, dist, df); // 压上接敌
       }
     } else {
-      moveAlong(ui, dist, df, threat); // 在火力圈外集结推进
+      moveAlong(ui, dist, df, oppThreat); // 在火力圈外集结推进
     }
   } else {
     moveAlong(ui, dist, df);
   }
+}
 
-  // 移动后若已进入射程，顺势攻击——避免"走到脸上却不出手"。
-  std::vector<std::pair<int, bool>> ts;
-  findTargets(ui, u.x, u.y, ts);
-  int pick = -1, pickScore = -1;
-  for (auto &[ti, heal] : ts) {
-    if (heal)
-      continue;
-    const Unit &t = g.units[ti];
-    int dmg = effDmg(d.atk, t);
-    int s = dmg * 10 + (dmg >= t.hp ? 1000 : 0) + (t.def().hp - t.hp);
-    if (s > pickScore) {
-      pickScore = s;
-      pick = ti;
+// 固定的"朴素贪心"玩家策略：作为独立、不随敌方 AI 演化的强度标尺。
+// 有能攻则攻（击杀 > 残血），否则朝最近敌人（夺旗关主角朝旗帜）推进；
+// 刻意不做暴露规避 / 前瞻评估，因此与 aiActFor 相互独立，可暴露"自走同源偏差"。
+static void scriptedPlayerAct(int ui) {
+  Unit &u = g.units[ui];
+  const UnitDef &d = u.def();
+  static int dist[n][n];
+  computeReach(ui, dist);
+  auto inRangeLos = [&](int x, int y, const Unit &t) {
+    int md = manh(x, y, t.x, t.y);
+    return md >= 1 && md <= d.rng && (d.rng == 1 || los(x, y, t.x, t.y));
+  };
+  // 牧师：治疗缺血最多的友军
+  if (d.healer) {
+    int best = -1, bx = u.x, by = u.y, bt = -1;
+    for (int y = 0; y < n; y++)
+      for (int x = 0; x < n; x++) {
+        if (dist[y][x] < 0 || !canStand(ui, x, y))
+          continue;
+        for (int i = 0; i < (int)g.units.size(); i++) {
+          const Unit &t = g.units[i];
+          if (!t.alive || i == ui || t.def().enemy)
+            continue;
+          int miss = t.def().hp - t.hp;
+          if (miss < 3 || !inRangeLos(x, y, t))
+            continue;
+          int s = miss * 10 - dist[y][x];
+          if (s > best) {
+            best = s;
+            bx = x;
+            by = y;
+            bt = i;
+          }
+        }
+      }
+    if (bt >= 0) {
+      moveUnit(ui, bx, by);
+      doAction(ui, bt, true);
+      return;
     }
   }
-  if (pick >= 0)
-    doAction(ui, pick, false);
+  // 贪心攻击：可达落点里选最优（击杀优先，其次残血），无视自身暴露
+  int best = -1, bx = u.x, by = u.y, bt = -1;
+  for (int y = 0; y < n; y++)
+    for (int x = 0; x < n; x++) {
+      if (dist[y][x] < 0 || !canStand(ui, x, y))
+        continue;
+      for (int i = 0; i < (int)g.units.size(); i++) {
+        const Unit &t = g.units[i];
+        if (!t.alive || !t.def().enemy || !inRangeLos(x, y, t))
+          continue;
+        int dmg = effDmg(d.atk, t);
+        int s = (dmg >= t.hp ? 1000 : 0) + dmg * 10 + (t.def().hp - t.hp) - dist[y][x];
+        if (s > best) {
+          best = s;
+          bx = x;
+          by = y;
+          bt = i;
+        }
+      }
+    }
+  if (bt >= 0) {
+    moveUnit(ui, bx, by);
+    doAction(ui, bt, false);
+    return;
+  }
+  // 打不到：夺旗关主角冲旗，否则朝最近敌人推进
+  static int df[n][n];
+  if (u.type == UGreen && levels[g.levelIdx].obj == ObjReach && g.exitX >= 0) {
+    distField({{g.exitX, g.exitY}}, df);
+    moveAlong(ui, dist, df);
+    return;
+  }
+  std::vector<std::pair<int, int>> srcs;
+  for (auto &p : g.units)
+    if (p.alive && p.def().enemy)
+      srcs.push_back({p.x, p.y});
+  if (srcs.empty())
+    return;
+  distField(srcs, df);
+  moveAlong(ui, dist, df);
 }
 
 // ------------------------------------------------------------------ 存/读档
@@ -1200,7 +1296,7 @@ static const char *objText(Objective o) {
   case ObjWipe:
     return "目标：歼灭所有敌人";
   case ObjReach:
-    return "目标：主角抵达旗帜";
+    return "目标：抵达旗帜或全歼敌军";
   default:
     return "目标：击败魔王";
   }
@@ -1892,7 +1988,10 @@ static int cliPlayOneGame(int maxTurns, bool verbose) {
         continue;
       int ox = u.x, oy = u.y;
       cliLog.clear();
-      aiActFor(i);
+      if (benchScriptedPlayer)
+        scriptedPlayerAct(i);
+      else
+        aiActFor(i);
       if (verbose) {
         std::string line =
             TextFormat("T%-2d 我 %c %s", g.turn, typeChar[u.type], sqName(ox, oy).c_str());
@@ -2131,6 +2230,133 @@ static int cliMain(int startLevel) {
   return 0;
 }
 
+// 用固定的朴素贪心玩家（scriptedPlayerAct）迎战当前敌方 AI —— 一个不随 AI 演化的
+// 独立强度标尺。若自走(--analyze)与本表对同一关难度判断相反，多半是"自走同源偏差"。
+static int cliBench(int games, int maxTurns) {
+  printf("固定朴素玩家 vs 当前敌方 AI（%d 局/关，回合上限 %d）——独立强度标尺\n\n", games, maxTurns);
+  printf("关卡        胜   负  超时  均胜回合  主角均余血\n");
+  benchScriptedPlayer = true;
+  for (int l = 0; l < nlevels; l++) {
+    SelfplayStats st = cliSelfplay(l, games, maxTurns, false);
+    printf("%d %-8s %3d  %3d  %3d  %7.1f  %9.1f\n", l + 1, levels[l].name, st.wins, st.losses,
+           st.timeouts, st.wins ? st.sumWinTurns / st.wins : 0.0,
+           st.wins ? st.sumGreenHp / st.wins : 0.0);
+  }
+  benchScriptedPlayer = false;
+  return 0;
+}
+
+// ------------------------------------------------------------------ 战术回归测试
+// 给定精确局面 → 断言 AI 的决策。确定性、不依赖自走，是 AI 正确性的地面真值
+// （防止改动悄悄踩坏旧能力）。
+static int testFails = 0, testTotal = 0;
+static void tReset(int lvl) {
+  loadLevel(lvl);
+  g.units.clear();
+  g.gameMode = MPlay;
+  scoreJitter = 0;
+  aiSim = false;
+  benchScriptedPlayer = false;
+}
+static int tAdd(int type, int x, int y, int hp) {
+  Unit u;
+  u.type = type;
+  u.x = x;
+  u.y = y;
+  u.hp = hp;
+  u.vx = (float)x;
+  u.vy = (float)y;
+  g.units.push_back(u);
+  return (int)g.units.size() - 1;
+}
+static void tCheck(const char *name, bool ok, const std::string &detail) {
+  testTotal++;
+  if (!ok)
+    testFails++;
+  printf("  [%s] %s%s\n", ok ? "PASS" : "FAIL", name, ok ? "" : ("  <- " + detail).c_str());
+}
+
+static int runTests() {
+  printf("战术回归测试（确定性，独立于自走）：\n");
+
+  // T1 有必杀就取——远程小兵射程内可秒杀红法师
+  tReset(0);
+  tAdd(UGreen, 0, 0, 12);
+  int a = tAdd(UEsoldier, 7, 7, 1);
+  int tgt = tAdd(URed, 7, 9, 2);
+  aiActFor(a);
+  tCheck("lethal-kill", !g.units[tgt].alive, "敌兵未秒杀射程内的红法师");
+
+  // T2 集火脆皮——敌将同时够到红法师(def0)与蓝骑士(def2)，应打红法师
+  tReset(0);
+  tAdd(UGreen, 0, 0, 12);
+  a = tAdd(UEcaptain, 7, 7, 9);
+  int mage = tAdd(URed, 7, 8, 8);
+  int kn = tAdd(UBlue, 6, 7, 14);
+  aiActFor(a);
+  tCheck("focus-squishy", g.units[mage].hp < 8 && g.units[kn].hp == 14,
+         TextFormat("红法师hp=%d 蓝骑士hp=%d", g.units[mage].hp, g.units[kn].hp));
+
+  // T3 远程放风筝——敌巫应隔空射击而非贴脸
+  tReset(0);
+  tAdd(UGreen, 0, 0, 12);
+  a = tAdd(UEmage, 7, 5, 6);
+  kn = tAdd(UBlue, 7, 9, 14);
+  aiActFor(a);
+  tCheck("ranged-kite", g.units[kn].hp < 14 && manh(g.units[a].x, g.units[a].y, 7, 9) >= 2,
+         TextFormat("蓝骑士hp=%d 距离=%d", g.units[kn].hp, manh(g.units[a].x, g.units[a].y, 7, 9)));
+
+  // T4 群胆压上——有 2 名同伴壮胆时，敌将贴脸攻击蓝骑士（历史"贴脸不打"回归）
+  tReset(0);
+  tAdd(UGreen, 0, 0, 12);
+  kn = tAdd(UBlue, 7, 4, 14);
+  a = tAdd(UEcaptain, 7, 7, 9);
+  tAdd(UEsoldier, 6, 8, 1);
+  tAdd(UEsoldier, 8, 8, 1);
+  aiActFor(a);
+  tCheck("grouped-commit", g.units[kn].hp < 14, "群胆敌将未攻击蓝骑士（贴脸不打）");
+
+  // T5 优先取价值——小兵射程内既能秒红法师又能蹭主角，应取红法师的人头
+  tReset(0);
+  tAdd(UGreen, 7, 9, 12);
+  int red = tAdd(URed, 7, 5, 2);
+  a = tAdd(UEsoldier, 7, 7, 1);
+  aiActFor(a);
+  tCheck("secure-kill", !g.units[red].alive, "小兵没取射程内红法师的人头");
+
+  // T6 牧师治疗——应治疗相邻缺血的主角
+  tReset(0);
+  tAdd(UEsoldier, 0, 0, 1);
+  a = tAdd(UYellow, 7, 7, 9);
+  int green = tAdd(UGreen, 7, 8, 5);
+  aiActFor(a);
+  tCheck("healer-heals", g.units[green].hp > 5,
+         TextFormat("牧师未治疗缺血主角，hp=%d", g.units[green].hp));
+
+  // T7 魔王范围——同时波及范围内两个小兵
+  tReset(0);
+  tAdd(UGreen, 0, 14, 12);
+  a = tAdd(UEboss, 7, 7, 20);
+  int s1 = tAdd(USoldier, 7, 8, 1);
+  int s2 = tAdd(USoldier, 8, 7, 1);
+  aiActFor(a);
+  tCheck("boss-aoe", !g.units[s1].alive && !g.units[s2].alive, "魔王范围攻击未同时命中两个小兵");
+
+  // T8 夺旗关主角朝旗帜推进
+  tReset(2);
+  tAdd(UEsoldier, 0, 0, 1);
+  green = tAdd(UGreen, 2, 13, 12);
+  int before = manh(2, 13, g.exitX, g.exitY);
+  aiActFor(green);
+  int after = manh(g.units[green].x, g.units[green].y, g.exitX, g.exitY);
+  tCheck("hero-marches-flag", after < before,
+         TextFormat("到旗帜距离 %d->%d 未缩短", before, after));
+
+  printf("\n结果：%d/%d 通过%s\n", testTotal - testFails, testTotal,
+         testFails ? "（有失败！）" : "");
+  return testFails ? 1 : 0;
+}
+
 // ------------------------------------------------------------------ 主循环
 int main(int Argc, char **Argv) {
   if (Argc > 1 && strcmp(Argv[1], "--cli") == 0) {
@@ -2140,6 +2366,14 @@ int main(int Argc, char **Argv) {
   if (Argc > 1 && strcmp(Argv[1], "--analyze") == 0) {
     cliMode = true;
     return cliAnalyze(Argc > 2 ? atoi(Argv[2]) : 20, Argc > 3 ? atoi(Argv[3]) : 40);
+  }
+  if (Argc > 1 && strcmp(Argv[1], "--bench") == 0) {
+    cliMode = true;
+    return cliBench(Argc > 2 ? atoi(Argv[2]) : 100, Argc > 3 ? atoi(Argv[3]) : 40);
+  }
+  if (Argc > 1 && strcmp(Argv[1], "--test") == 0) {
+    cliMode = true;
+    return runTests();
   }
   SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT);
   InitWindow(winW, winH, "Squarebound · 方格征途");
