@@ -27,10 +27,10 @@
 
 // ------------------------------------------------------------------ 配置
 static const int n = 15;           // 棋盘 15x15
-static const int cell = 46;        // 格子像素
-static const int bx = 30, by = 35; // 棋盘原点
+static const int cell = 48;        // 格线间距（像素）
+static const int bx = 30, by = 35; // 棋盘原点（左上交叉点）
 static const int winW = 1280, winH = 760;
-static const int panelX = bx + n * cell + 26; // 侧栏起点
+static const int panelX = bx + (n - 1) * cell + 60; // 侧栏起点：紧贴棋盘右框
 static const int panelW = winW - panelX - 24;
 static const int healAmt = 4;      // 牧师治疗量
 static const int herbAmt = 4;      // 药草回复量
@@ -340,8 +340,19 @@ static std::string unitTag(const Unit &u) {
 // ------------------------------------------------------------------ 小工具
 static int manh(int x0, int y0, int x1, int y1) { return abs(x0 - x1) + abs(y0 - y1); }
 static bool inBoard(int x, int y) { return x >= 0 && x < n && y >= 0 && y < n; }
-static Vector2 cellCenter(float cx, float cy) {
-  return {bx + cx * cell + cell * 0.5f, by + cy * cell + cell * 0.5f};
+// 棋子落在网格交叉点上（五子棋式），而非格子中心
+static Vector2 cellCenter(float cx, float cy) { return {bx + cx * cell, by + cy * cell}; }
+// 以交叉点为中心、一格大小的矩形（高亮用）
+static Rectangle nodeRect(int x, int y, float inset) {
+  return {bx + x * cell - cell / 2.0f + inset, by + y * cell - cell / 2.0f + inset,
+          (float)cell - 2 * inset, (float)cell - 2 * inset};
+}
+// 指针最近的交叉点；返回是否落在棋盘内
+static bool mouseNode(Vector2 m, int &cx, int &cy) {
+  cx = (int)lroundf((m.x - bx) / (float)cell);
+  cy = (int)lroundf((m.y - by) / (float)cell);
+  return inBoard(cx, cy) && m.x >= bx - cell / 2.0f && m.y >= by - cell / 2.0f &&
+         m.x <= bx + (n - 1) * cell + cell / 2.0f && m.y <= by + (n - 1) * cell + cell / 2.0f;
 }
 
 static void addFloat(int cx, int cy, const std::string &s, Color c) {
@@ -1309,8 +1320,8 @@ static void updatePlay(float dt) {
     return;
   }
 
-  int mcx = (int)floorf((m.x - bx) / cell), mcy = (int)floorf((m.y - by) / cell);
-  bool onBoard = inBoard(mcx, mcy) && m.x >= bx && m.y >= by;
+  int mcx, mcy;
+  bool onBoard = mouseNode(m, mcx, mcy);
 
   if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) {
     if (g.sel >= 0) {
@@ -1475,31 +1486,27 @@ static void drawHoverRange(int ui) {
     for (int x = 0; x < n; x++) {
       bool canMove = dist[y][x] >= 0 && canStand(ui, x, y);
       if (canMove) {
-        DrawRectangle(bx + x * cell + 1, by + y * cell + 1, cell - 2, cell - 2,
-                      Fade(moveCol, 0.24f));
-        DrawRectangleLinesEx({(float)(bx + x * cell + 1), (float)(by + y * cell + 1),
-                              (float)cell - 2, (float)cell - 2},
-                             1, Fade(moveCol, 0.4f));
+        DrawRectangleRec(nodeRect(x, y, 1), Fade(moveCol, 0.24f));
+        DrawRectangleLinesEx(nodeRect(x, y, 1), 1, Fade(moveCol, 0.4f));
       } else if (atk[y][x]) {
         // 移动范围之外的攻击覆盖：红色描边（可移动后打到的额外威胁）
-        DrawRectangleLinesEx({(float)(bx + x * cell + 3), (float)(by + y * cell + 3),
-                              (float)cell - 6, (float)cell - 6},
-                             1.5f, Fade(atkCol, 0.55f));
+        DrawRectangleLinesEx(nodeRect(x, y, 3), 1.5f, Fade(atkCol, 0.55f));
       }
     }
 }
 
 static void drawBoard() {
   // 木质棋盘
-  DrawRectangle(bx - 14, by - 14, n * cell + 28, n * cell + 28, cWoodE);
-  DrawRectangle(bx - 8, by - 8, n * cell + 16, n * cell + 16, cWood);
-  DrawRectangleLinesEx({(float)bx - 14, (float)by - 14, (float)n * cell + 28, (float)n * cell + 28},
-                       3, (Color){70, 46, 26, 255});
-  for (int i = 0; i <= n; i++) {
-    DrawLineEx({(float)(bx + i * cell), (float)by},
-               {(float)(bx + i * cell), (float)(by + n * cell)}, 1.0f, Fade(cGrid, 0.65f));
-    DrawLineEx({(float)bx, (float)(by + i * cell)},
-               {(float)(bx + n * cell), (float)(by + i * cell)}, 1.0f, Fade(cGrid, 0.65f));
+  const int span = (n - 1) * cell; // 交叉点从 0 到 n-1
+  DrawRectangle(bx - 30, by - 30, span + 60, span + 60, cWoodE);
+  DrawRectangle(bx - 24, by - 24, span + 48, span + 48, cWood);
+  DrawRectangleLinesEx({(float)bx - 30, (float)by - 30, (float)span + 60, (float)span + 60}, 3,
+                       (Color){70, 46, 26, 255});
+  for (int i = 0; i < n; i++) {
+    DrawLineEx({(float)(bx + i * cell), (float)by}, {(float)(bx + i * cell), (float)(by + span)},
+               1.0f, Fade(cGrid, 0.65f));
+    DrawLineEx({(float)bx, (float)(by + i * cell)}, {(float)(bx + span), (float)(by + i * cell)},
+               1.0f, Fade(cGrid, 0.65f));
   }
   // 五子棋星位
   const int stars[5][2] = {{3, 3}, {3, 11}, {7, 7}, {11, 3}, {11, 11}};
@@ -1510,8 +1517,7 @@ static void drawBoard() {
   if (g.exitX >= 0) {
     Vector2 p = cellCenter((float)g.exitX, (float)g.exitY);
     float pulse = 0.5f + 0.5f * sinf((float)GetTime() * 3);
-    DrawRectangle(bx + g.exitX * cell + 2, by + g.exitY * cell + 2, cell - 4, cell - 4,
-                  Fade(cGold, 0.25f + 0.15f * pulse));
+    DrawRectangleRec(nodeRect(g.exitX, g.exitY, 2), Fade(cGold, 0.25f + 0.15f * pulse));
     Vector2 gm = MeasureTextEx(gFont, "旗", 24, 0);
     DrawTextEx(gFont, "旗", {p.x - gm.x / 2, p.y - gm.y / 2}, 24, 0,
                Fade((Color){180, 60, 40, 255}, 0.85f + 0.15f * pulse));
@@ -1531,18 +1537,15 @@ static void drawBoard() {
     for (int y = 0; y < n; y++)
       for (int x = 0; x < n; x++)
         if (g.reach[y][x] >= 0 && canStand(g.sel, x, y)) {
-          DrawRectangle(bx + x * cell + 1, by + y * cell + 1, cell - 2, cell - 2,
-                        Fade((Color){90, 190, 120, 255}, 0.30f));
-          DrawRectangleLinesEx({(float)(bx + x * cell + 1), (float)(by + y * cell + 1),
-                                (float)cell - 2, (float)cell - 2},
-                               1, Fade((Color){90, 190, 120, 255}, 0.45f));
+          DrawRectangleRec(nodeRect(x, y, 1), Fade((Color){90, 190, 120, 255}, 0.30f));
+          DrawRectangleLinesEx(nodeRect(x, y, 1), 1, Fade((Color){90, 190, 120, 255}, 0.45f));
         }
   }
   // 悬停预览：指针所指单位（非当前选中）的移动/攻击范围
   {
     Vector2 hm = GetMousePosition();
-    int hx = (int)floorf((hm.x - bx) / cell), hy = (int)floorf((hm.y - by) / cell);
-    if (g.gameMode == MPlay && inBoard(hx, hy) && hm.x >= bx && hm.y >= by) {
+    int hx, hy;
+    if (g.gameMode == MPlay && mouseNode(hm, hx, hy)) {
       int hu = unitAt(hx, hy);
       if (hu >= 0 && hu != g.sel)
         drawHoverRange(hu);
@@ -1550,11 +1553,9 @@ static void drawBoard() {
   }
   // 悬停格
   Vector2 m = GetMousePosition();
-  int mcx = (int)floorf((m.x - bx) / cell), mcy = (int)floorf((m.y - by) / cell);
-  if (inBoard(mcx, mcy) && m.x >= bx && m.y >= by && g.gameMode == MPlay)
-    DrawRectangleLinesEx(
-        {(float)(bx + mcx * cell), (float)(by + mcy * cell), (float)cell, (float)cell}, 2,
-        Fade(RAYWHITE, 0.5f));
+  int mcx, mcy;
+  if (g.gameMode == MPlay && mouseNode(m, mcx, mcy))
+    DrawRectangleLinesEx(nodeRect(mcx, mcy, 0), 2, Fade(RAYWHITE, 0.5f));
 
   // 黑子障碍
   for (int y = 0; y < n; y++)
@@ -1671,9 +1672,9 @@ static void drawPanel() {
 
   // 单位卡：优先悬停，其次选中
   Vector2 m = GetMousePosition();
-  int mcx = (int)floorf((m.x - bx) / cell), mcy = (int)floorf((m.y - by) / cell);
+  int mcx, mcy;
   int show = -1;
-  if (inBoard(mcx, mcy) && m.x >= bx && m.y >= by)
+  if (mouseNode(m, mcx, mcy))
     show = unitAt(mcx, mcy);
   if (show < 0)
     show = g.sel;
@@ -1713,11 +1714,11 @@ static void drawPanel() {
 static void drawBannerToasts(float dt) {
   if (g.bannerT > 0) {
     float a = std::min(1.0f, g.bannerT / 0.4f);
-    float bw = n * cell;
-    DrawRectangle(bx, by + n * cell / 2 - 36, (int)bw, 72, Fade(BLACK, 0.55f * a));
+    float bw = (n - 1) * cell;
+    DrawRectangle(bx, by + (int)bw / 2 - 36, (int)bw, 72, Fade(BLACK, 0.55f * a));
     Vector2 mm = MeasureTextEx(gFontBig, g.banner.c_str(), 40, 2);
-    DrawTextEx(gFontBig, g.banner.c_str(),
-               {bx + bw / 2 - mm.x / 2, by + n * cell / 2.0f - mm.y / 2}, 40, 2, Fade(cGold, a));
+    DrawTextEx(gFontBig, g.banner.c_str(), {bx + bw / 2 - mm.x / 2, by + bw / 2 - mm.y / 2}, 40, 2,
+               Fade(cGold, a));
   }
   float ty = winH - 44;
   for (int i = (int)g.toasts.size() - 1; i >= 0; i--) {
