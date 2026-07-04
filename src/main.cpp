@@ -32,7 +32,7 @@ static const int bx = 30, by = 35; // 棋盘原点（左上交叉点）
 static const int winW = 1280, winH = 760;
 static const int panelX = bx + (n - 1) * cell + 60; // 侧栏起点：紧贴棋盘右框
 static const int panelW = winW - panelX - 24;
-static const int healAmt = 4;      // 牧师治疗量
+static const int healAmt = 3;      // 牧师治疗量
 static const int herbAmt = 4;      // 药草回复量
 static const int minDmg = 1;       // 最低伤害：攻击不低于此值（防御再高也会掉血）
 static const float aiStep = 0.55f; // 敌方单位行动间隔(秒)
@@ -76,9 +76,9 @@ static const UnitDef defs[UCount] = {
     {"黄牧师",     "牧",  9, 2, 0, 3, 2, false, true,  false, cYellow,  {140, 104, 26, 255}, {60, 44, 10, 255}},
     {"义勇兵",     "兵",  1, 2, 0, 2, 2, false, false, false, cIvory,   {110, 120, 150, 255},{50, 60, 90, 255}},
     {"敌方小兵",   "卒",  1, 2, 0, 2, 2, true,  false, false, cIvoryD,  {140, 44, 40, 255},  {130, 36, 32, 255}},
-    {"敌将",       "将",  9, 4, 1, 3, 1, true,  false, false, cBlackpc, cEnemy,              {236, 120, 110, 255}},
+    {"敌将",       "将",  9, 5, 1, 3, 1, true,  false, false, cBlackpc, cEnemy,              {236, 120, 110, 255}},
     {"敌巫",       "巫",  9, 5, 0, 2, 3, true,  false, false, cBlackpc, cPurple,             {200, 160, 240, 255}},
-    {"魔王",       "王", 20, 5, 2, 2, 2, true,  false, true,  cBlackpc, cGold,               cGold},
+    {"魔王",       "王", 16, 5, 2, 2, 2, true,  false, true,  cBlackpc, cGold,               cGold},
 };
 // clang-format on
 
@@ -102,7 +102,7 @@ static const LevelDef levels[] = {
      {
          "...............",
          "...e.......e...",
-         "..e.......e....",
+         "...............",
          ".......c.......",
          "....e..m..e....",
          ".....X...X.....",
@@ -160,11 +160,11 @@ static const LevelDef levels[] = {
      "两员敌将互为犄角，敌巫压阵，敌兵蜂拥而至。逐个击破，勿陷重围！",
      ObjWipe,
      {
-         "...e...e...e...",
+         "...............",
          "....c.....c....",
          "....e.....e....",
          "..e...e.e...e..",
-         "....e.....e....",
+         "...............",
          ".....X.X.X.....",
          "....m.....m....",
          "..X..........X.",
@@ -182,10 +182,10 @@ static const LevelDef levels[] = {
      {
          "...............",
          "...e...c...e...",
-         "......m........",
-         ".....e...e.....",
+         "....m.....m....",
+         "...............",
          "...e...c...e...",
-         "..e.........e..",
+         "...............",
          "...............",
          "XXXX.XXXXX.XXXX",
          "...............",
@@ -2132,6 +2132,7 @@ static int cliPlayOneGame(int maxTurns, bool verbose) {
 struct SelfplayStats {
   int wins = 0, losses = 0, timeouts = 0;
   double sumWinTurns = 0, sumGreenHp = 0, sumSurvivors = 0;
+  int present[UCount] = {0}, survived[UCount] = {0}; // 各兵种出场/活到终局的局数
 };
 
 static SelfplayStats cliSelfplay(int level, int games, int maxTurns, bool verbose) {
@@ -2142,6 +2143,12 @@ static SelfplayStats cliSelfplay(int level, int games, int maxTurns, bool verbos
     loadLevel(level);
     g.gameMode = MPlay;
     int r = cliPlayOneGame(maxTurns, verbose);
+    for (auto &u : g.units) // 各兵种存活统计（不分胜负，衡量英雄是否被当消耗品）
+      if (!u.def().enemy) {
+        st.present[u.type]++;
+        if (u.alive)
+          st.survived[u.type]++;
+      }
     if (r == 1) {
       st.wins++;
       st.sumWinTurns += g.turn;
@@ -2161,13 +2168,17 @@ static SelfplayStats cliSelfplay(int level, int games, int maxTurns, bool verbos
 }
 
 static int cliAnalyze(int games, int maxTurns) {
-  printf("关卡强度分析：每关 AI 双方自走 %d 局（回合上限 %d）\n\n", games, maxTurns);
-  printf("关卡        胜   负  超时  均胜回合  主角均余血  均存活\n");
+  printf("关卡强度分析：每关自走 %d 局。存活%% = 该英雄活到终局的局数占比（不分胜负）\n\n", games);
+  printf("关卡        胜   均回合  主角余血    存活%%  主  骑  法  牧\n");
   for (int l = 0; l < nlevels; l++) {
     SelfplayStats st = cliSelfplay(l, games, maxTurns, false);
-    printf("%d %-8s %3d  %3d  %3d  %7.1f  %9.1f  %5.1f\n", l + 1, levels[l].name, st.wins,
-           st.losses, st.timeouts, st.wins ? st.sumWinTurns / st.wins : 0.0,
-           st.wins ? st.sumGreenHp / st.wins : 0.0, st.wins ? st.sumSurvivors / st.wins : 0.0);
+    auto sv = [&](int t) -> std::string {
+      return st.present[t] ? std::string(TextFormat("%3d", st.survived[t] * 100 / st.present[t]))
+                           : std::string("  -");
+    };
+    printf("%d %-8s %3d  %6.1f  %8.1f          %s %s %s %s\n", l + 1, levels[l].name, st.wins,
+           st.wins ? st.sumWinTurns / st.wins : 0.0, st.wins ? st.sumGreenHp / st.wins : 0.0,
+           sv(UGreen).c_str(), sv(UBlue).c_str(), sv(URed).c_str(), sv(UYellow).c_str());
   }
   return 0;
 }
