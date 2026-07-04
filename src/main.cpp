@@ -315,10 +315,10 @@ static Font gFont, gFontBig;
 // 单位字母与关卡图例一致：G 主角 B 蓝骑士 R 红法师 Y 黄牧师 s 义勇兵
 //                          e 敌兵 c 敌将 m 敌巫 K 魔王
 static bool cliMode = false;
-static bool aiSim = false;               // 置位时抑制动画/日志副作用（AI 前瞻模拟用）
-static bool benchScriptedPlayer = false; // 置位时玩家方改用固定的朴素贪心策略（独立强度标尺）
-static int scoreJitter = 0;              // selfplay 打分抖动（模拟多局差异）
-static std::vector<std::string> cliLog;  // 战斗事件（伤害/治疗）记录
+static bool aiSim = false;              // 置位时抑制动画/日志副作用（AI 前瞻模拟用）
+static int benchPolicy = 0;             // 玩家方策略：0=自走AI 1=冲锋 2=风筝 3=龟缩（独立强度标尺）
+static int scoreJitter = 0;             // selfplay 打分抖动（模拟多局差异）
+static std::vector<std::string> cliLog; // 战斗事件（伤害/治疗）记录
 
 static const char typeChar[UCount] = {'G', 'B', 'R', 'Y', 's', 'e', 'c', 'm', 'K'};
 
@@ -954,48 +954,18 @@ static void aiActFor(int ui) {
   }
 }
 
-// 固定的"朴素贪心"玩家策略：作为独立、不随敌方 AI 演化的强度标尺。
-// 有能攻则攻（击杀 > 残血），否则朝最近敌人（夺旗关主角朝旗帜）推进；
-// 刻意不做暴露规避 / 前瞻评估，因此与 aiActFor 相互独立，可暴露"自走同源偏差"。
-static void scriptedPlayerAct(int ui) {
+// ---- 三种固定的玩家原型：互相独立、不随敌方 AI 演化，构成多样化的强度标尺。
+//      只对单一原型调优会过拟合（例如为压制"冲锋"而拆掉抗蹲坑逻辑，反被"龟缩"钻空子），
+//      故 --bench 对全部原型评测、取玩家最优原型来判定难度。三者都刻意简单、不做前瞻。----
+
+// 牧师：治疗缺血最多的友军；返回是否行动
+static bool scriptedHeal(int ui) {
   Unit &u = g.units[ui];
   const UnitDef &d = u.def();
+  if (!d.healer)
+    return false;
   static int dist[n][n];
   computeReach(ui, dist);
-  auto inRangeLos = [&](int x, int y, const Unit &t) {
-    int md = manh(x, y, t.x, t.y);
-    return md >= 1 && md <= d.rng && (d.rng == 1 || los(x, y, t.x, t.y));
-  };
-  // 牧师：治疗缺血最多的友军
-  if (d.healer) {
-    int best = -1, bx = u.x, by = u.y, bt = -1;
-    for (int y = 0; y < n; y++)
-      for (int x = 0; x < n; x++) {
-        if (dist[y][x] < 0 || !canStand(ui, x, y))
-          continue;
-        for (int i = 0; i < (int)g.units.size(); i++) {
-          const Unit &t = g.units[i];
-          if (!t.alive || i == ui || t.def().enemy)
-            continue;
-          int miss = t.def().hp - t.hp;
-          if (miss < 3 || !inRangeLos(x, y, t))
-            continue;
-          int s = miss * 10 - dist[y][x];
-          if (s > best) {
-            best = s;
-            bx = x;
-            by = y;
-            bt = i;
-          }
-        }
-      }
-    if (bt >= 0) {
-      moveUnit(ui, bx, by);
-      doAction(ui, bt, true);
-      return;
-    }
-  }
-  // 贪心攻击：可达落点里选最优（击杀优先，其次残血），无视自身暴露
   int best = -1, bx = u.x, by = u.y, bt = -1;
   for (int y = 0; y < n; y++)
     for (int x = 0; x < n; x++) {
@@ -1003,7 +973,45 @@ static void scriptedPlayerAct(int ui) {
         continue;
       for (int i = 0; i < (int)g.units.size(); i++) {
         const Unit &t = g.units[i];
-        if (!t.alive || !t.def().enemy || !inRangeLos(x, y, t))
+        if (!t.alive || i == ui || t.def().enemy)
+          continue;
+        int md = manh(x, y, t.x, t.y);
+        if (t.def().hp - t.hp < 3 || md < 1 || md > d.rng || (d.rng > 1 && !los(x, y, t.x, t.y)))
+          continue;
+        int s = (t.def().hp - t.hp) * 10 - dist[y][x];
+        if (s > best) {
+          best = s;
+          bx = x;
+          by = y;
+          bt = i;
+        }
+      }
+    }
+  if (bt >= 0) {
+    moveUnit(ui, bx, by);
+    doAction(ui, bt, true);
+    return true;
+  }
+  return false;
+}
+
+// 贪心攻击：可达落点里选最优（击杀 > 残血，无视自身暴露）；返回是否出手
+static bool scriptedGreedyAttack(int ui) {
+  Unit &u = g.units[ui];
+  const UnitDef &d = u.def();
+  static int dist[n][n];
+  computeReach(ui, dist);
+  int best = -1, bx = u.x, by = u.y, bt = -1;
+  for (int y = 0; y < n; y++)
+    for (int x = 0; x < n; x++) {
+      if (dist[y][x] < 0 || !canStand(ui, x, y))
+        continue;
+      for (int i = 0; i < (int)g.units.size(); i++) {
+        const Unit &t = g.units[i];
+        if (!t.alive || !t.def().enemy)
+          continue;
+        int md = manh(x, y, t.x, t.y);
+        if (md < 1 || md > d.rng || (d.rng > 1 && !los(x, y, t.x, t.y)))
           continue;
         int dmg = effDmg(d.atk, t);
         int s = (dmg >= t.hp ? 1000 : 0) + dmg * 10 + (t.def().hp - t.hp) - dist[y][x];
@@ -1018,15 +1026,29 @@ static void scriptedPlayerAct(int ui) {
   if (bt >= 0) {
     moveUnit(ui, bx, by);
     doAction(ui, bt, false);
-    return;
+    return true;
   }
-  // 打不到：夺旗关主角冲旗，否则朝最近敌人推进
-  static int df[n][n];
-  if (u.type == UGreen && levels[g.levelIdx].obj == ObjReach && g.exitX >= 0) {
-    distField({{g.exitX, g.exitY}}, df);
-    moveAlong(ui, dist, df);
+  return false;
+}
+
+// 夺旗关主角朝旗帜推进；返回是否处理
+static bool scriptedRushFlag(int ui) {
+  Unit &u = g.units[ui];
+  if (u.type != UGreen || levels[g.levelIdx].obj != ObjReach || g.exitX < 0)
+    return false;
+  static int dist[n][n], df[n][n];
+  computeReach(ui, dist);
+  distField({{g.exitX, g.exitY}}, df);
+  moveAlong(ui, dist, df);
+  return true;
+}
+
+// 原型①冲锋：有能攻则攻，否则朝最近敌人硬冲（鲁莽，会因站位差挨打）
+static void rushAct(int ui) {
+  if (scriptedHeal(ui) || scriptedGreedyAttack(ui) || scriptedRushFlag(ui))
     return;
-  }
+  static int dist[n][n], df[n][n];
+  computeReach(ui, dist);
   std::vector<std::pair<int, int>> srcs;
   for (auto &p : g.units)
     if (p.alive && p.def().enemy)
@@ -1035,6 +1057,87 @@ static void scriptedPlayerAct(int ui) {
     return;
   distField(srcs, df);
   moveAlong(ui, dist, df);
+}
+
+// 原型②风筝：从最不暴露的落点射击；够不到就在敌火力圈外游走，受威胁则后撤（打了就跑）
+static void kiteAct(int ui) {
+  if (scriptedHeal(ui))
+    return;
+  Unit &u = g.units[ui];
+  const UnitDef &d = u.def();
+  static int dist[n][n], df[n][n], et[n][n];
+  computeReach(ui, dist);
+  threatMap(true, et); // 敌方对我方的威胁
+  int best = -1000000000, bx = u.x, by = u.y, bt = -1;
+  for (int y = 0; y < n; y++)
+    for (int x = 0; x < n; x++) {
+      if (dist[y][x] < 0 || !canStand(ui, x, y))
+        continue;
+      for (int i = 0; i < (int)g.units.size(); i++) {
+        const Unit &t = g.units[i];
+        if (!t.alive || !t.def().enemy)
+          continue;
+        int md = manh(x, y, t.x, t.y);
+        if (md < 1 || md > d.rng || (d.rng > 1 && !los(x, y, t.x, t.y)))
+          continue;
+        int dmg = effDmg(d.atk, t);
+        int s =
+            (dmg >= t.hp ? 2000 : 0) + dmg * 20 + (t.def().hp - t.hp) - et[y][x] * 5 - dist[y][x];
+        if (s > best) {
+          best = s;
+          bx = x;
+          by = y;
+          bt = i;
+        }
+      }
+    }
+  if (bt >= 0) {
+    bool kill = effDmg(d.atk, g.units[bt]) >= g.units[bt].hp;
+    if (kill || !(et[by][bx] >= u.hp && u.def().hp <= 8)) { // 脆皮非击杀不站进必死火力
+      moveUnit(ui, bx, by);
+      doAction(ui, bt, false);
+      return;
+    }
+  }
+  if (scriptedRushFlag(ui))
+    return;
+  if (et[u.y][u.x] > 0) { // 被威胁：撤到最安全可达格
+    int mx = u.x, my = u.y, bt2 = et[u.y][u.x];
+    for (int y = 0; y < n; y++)
+      for (int x = 0; x < n; x++)
+        if (dist[y][x] >= 0 && canStand(ui, x, y) && et[y][x] < bt2) {
+          bt2 = et[y][x];
+          mx = x;
+          my = y;
+        }
+    if (mx != u.x || my != u.y)
+      moveUnit(ui, mx, my);
+    return;
+  }
+  std::vector<std::pair<int, int>> srcs; // 安全时朝最近敌人推进，但停在火力圈外
+  for (auto &p : g.units)
+    if (p.alive && p.def().enemy)
+      srcs.push_back({p.x, p.y});
+  if (srcs.empty())
+    return;
+  distField(srcs, df);
+  moveAlong(ui, dist, df, et);
+}
+
+// 原型③龟缩：只打送上门（射程内）的目标，否则原地固守——检验敌方是否被诱敌逐个送死
+static void campAct(int ui) {
+  if (scriptedHeal(ui) || scriptedGreedyAttack(ui) || scriptedRushFlag(ui))
+    return;
+  // 无目标：原地不动（结阵固守，逼敌来攻）
+}
+
+static void scriptedPlayerAct(int ui) {
+  if (benchPolicy == 2)
+    kiteAct(ui);
+  else if (benchPolicy == 3)
+    campAct(ui);
+  else
+    rushAct(ui);
 }
 
 // ------------------------------------------------------------------ 存/读档
@@ -1988,7 +2091,7 @@ static int cliPlayOneGame(int maxTurns, bool verbose) {
         continue;
       int ox = u.x, oy = u.y;
       cliLog.clear();
-      if (benchScriptedPlayer)
+      if (benchPolicy)
         scriptedPlayerAct(i);
       else
         aiActFor(i);
@@ -2230,19 +2333,23 @@ static int cliMain(int startLevel) {
   return 0;
 }
 
-// 用固定的朴素贪心玩家（scriptedPlayerAct）迎战当前敌方 AI —— 一个不随 AI 演化的
-// 独立强度标尺。若自走(--analyze)与本表对同一关难度判断相反，多半是"自走同源偏差"。
+// 三种固定原型玩家（冲锋/风筝/龟缩）分别迎战当前敌方 AI —— 一组不随 AI 演化的独立标尺。
+// 单一原型会过拟合且有盲区（冲锋看不出蹲坑漏洞等），故列出各原型胜率并取玩家最优原型：
+// 玩家会选最克这一关的打法，"最优"列即该关对聪明玩家的真实难度下限。
 static int cliBench(int games, int maxTurns) {
-  printf("固定朴素玩家 vs 当前敌方 AI（%d 局/关，回合上限 %d）——独立强度标尺\n\n", games, maxTurns);
-  printf("关卡        胜   负  超时  均胜回合  主角均余血\n");
-  benchScriptedPlayer = true;
+  printf("固定原型玩家 vs 当前敌方 AI（%d 局/关）——玩家各原型胜率 + 玩家最优原型\n\n", games);
+  printf("关卡        冲锋  风筝  龟缩  最优\n");
   for (int l = 0; l < nlevels; l++) {
-    SelfplayStats st = cliSelfplay(l, games, maxTurns, false);
-    printf("%d %-8s %3d  %3d  %3d  %7.1f  %9.1f\n", l + 1, levels[l].name, st.wins, st.losses,
-           st.timeouts, st.wins ? st.sumWinTurns / st.wins : 0.0,
-           st.wins ? st.sumGreenHp / st.wins : 0.0);
+    int w[4] = {0};
+    for (int p = 1; p <= 3; p++) {
+      benchPolicy = p;
+      w[p] = cliSelfplay(l, games, maxTurns, false).wins;
+    }
+    benchPolicy = 0;
+    int best = std::max({w[1], w[2], w[3]});
+    printf("%d %-8s %4d%% %4d%% %4d%% %4d%%\n", l + 1, levels[l].name, w[1] * 100 / games,
+           w[2] * 100 / games, w[3] * 100 / games, best * 100 / games);
   }
-  benchScriptedPlayer = false;
   return 0;
 }
 
@@ -2256,7 +2363,7 @@ static void tReset(int lvl) {
   g.gameMode = MPlay;
   scoreJitter = 0;
   aiSim = false;
-  benchScriptedPlayer = false;
+  benchPolicy = 0;
 }
 static int tAdd(int type, int x, int y, int hp) {
   Unit u;
